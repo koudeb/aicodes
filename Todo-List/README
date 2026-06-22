@@ -1,0 +1,178 @@
+# Tasked — a fast, private, fully client-side To-Do app
+
+A complete task manager that runs as a **single static site** (HTML + CSS + vanilla
+JS — no backend, no build step, no framework). **All your data stays on your
+device** in the browser's IndexedDB. It works offline, installs as a PWA, and runs
+identically on `localhost` and on Namecheap shared hosting — including inside a
+subfolder like `example.com/todo/`, because every path is relative.
+
+---
+
+## Files
+
+```
+index.html      App shell & markup
+style.css       All styling (theming via CSS custom properties)
+app.js          All application logic
+sw.js           Service worker (offline caching + notifications)
+manifest.json   PWA manifest
+icons/          icon-192.png, icon-512.png (placeholders — swap for your own)
+README.md       This file
+```
+
+---
+
+## Run locally
+
+A service worker needs to be served over `http://` (not opened as a `file://`
+path), but **`localhost` is exempt from the HTTPS requirement**, so any tiny
+static server works:
+
+```bash
+# Python 3
+python -m http.server 8080
+
+# or Node
+npx serve .
+
+# or PHP
+php -S localhost:8080
+```
+
+Then open **http://localhost:8080/**. That's it — the app seeds a few sample
+tasks on first run so you never see a blank screen.
+
+> Opening `index.html` directly from disk (`file://`) will load the UI but the
+> service worker, offline caching, and notifications won't register. Use a local
+> server for the full experience.
+
+---
+
+## Deploy to Namecheap shared hosting
+
+1. **Upload** the whole folder (or its contents) via cPanel **File Manager** or
+   FTP into `public_html` (for the site root) or `public_html/todo/` (for a
+   subfolder).
+2. **Enable free HTTPS.** In cPanel open **SSL/TLS Status** (AutoSSL) and run
+   *Run AutoSSL* for your domain. HTTPS is **required in production** for the
+   service worker and notifications to work. (AutoSSL is free on Namecheap.)
+3. Visit your URL. Because all paths are relative and the service worker is
+   registered with `{ scope: './' }`, it works at both:
+   - `https://example.com/`
+   - `https://example.com/todo/`
+
+No `.htaccess`, database, or server config is needed.
+
+### Why relative paths matter
+Every asset reference (`style.css`, `app.js`, `manifest.json`, `icons/…`), the
+manifest's `start_url`/`scope`, and the SW registration are all **relative**
+(`./`). That's what lets the app live in a subfolder without rewriting anything.
+
+---
+
+## Icons
+
+`icons/icon-192.png` and `icons/icon-512.png` are simple generated placeholders.
+**Drop your own** PNGs at those exact paths/sizes (192×192 and 512×512) to
+rebrand — the manifest and service worker already reference them. They're marked
+`purpose: "any maskable"`, so use a design with ~10% safe padding for Android
+maskable icons.
+
+---
+
+## Data & backups (read this!)
+
+- **Primary store:** IndexedDB (tasks, projects, tags, habits).
+- **Small UI prefs** (theme, last layout): `localStorage`.
+- The app calls `navigator.storage.persist()` to ask the browser to keep your
+  data even under storage pressure, and shows usage via `navigator.storage.estimate()`
+  in **Settings → Data & backup**.
+
+Because the data is local, **clearing your browser data / site storage will erase
+it.** Protect yourself:
+
+- **Settings → Backup → JSON** for a full one-click backup (and **Import** to
+  restore/merge). Do this regularly — the app will nudge you every ~7 days.
+- **CSV** export for spreadsheets, **.ics** export for calendar apps.
+
+---
+
+## Reminders — honest limitations
+
+The app uses a **layered, backend-free reminder system**:
+
+1. **In-app alerts** while the app is open — reliable.
+2. **On-load catch-up** — every time you open the app it surfaces overdue/missed
+   items.
+3. **OS notifications** via the Notifications API + service worker — these fire
+   **only while the app or browser is running**. Enable them in **Settings**
+   (permission is requested on a button press; HTTPS or localhost required).
+
+> ⚠️ **A reminder that fires when the browser is *fully closed* is not reliably
+> possible in a no-backend web app.** The Notification Triggers API was
+> abandoned, and Web Push requires a server. This app does **not** fake guaranteed
+> background reminders.
+>
+> **For critical deadlines, use the `.ics` export** and add the event to a real
+> calendar (Google/Apple/Outlook) — that's the dependable fallback.
+
+Installing as a **PWA** (Add to Home Screen / Install) gives the best possible
+notification behavior the platform allows.
+
+---
+
+## Feature overview
+
+- **Quick-add with natural language** — `Submit report next Friday at 3pm every 2 weeks #work !p1`
+  parses date, time, recurrence, `#tags`, and `!p1–!p4` priority, and strips them from the title.
+- **Views:** List, Today, Upcoming, Kanban board, Calendar (month, drag to
+  reschedule), Eisenhower Matrix, Time-block Planner.
+- **Tasks:** Markdown notes, 4 priorities, due date+time, separate start/"do"
+  date, time estimate, energy tag, subtasks, checklists, colored tags, favorites,
+  pins, flags.
+- **Organization:** Areas → Projects → Sections, recurring tasks (iCal RRULE via
+  rrule.js with human-readable text), Someday, Archive, Trash with Undo.
+- **Productivity:** Pomodoro timer (survives refresh), time tracking, habit
+  tracker with streaks, gamification (points/levels/streaks + vacation mode),
+  stats & charts, focus mode, templates.
+- **UX:** Dark/light/warm themes (respects `prefers-color-scheme`), command
+  palette (`Ctrl/⌘K`), search (`/`), single-key shortcuts, drag-and-drop
+  (SortableJS, touch-friendly), confetti/sound/haptics (off by default),
+  reduced-motion support, semantic HTML + ARIA live regions + keyboard nav.
+- **PWA & offline:** installable, app-shell precaching, CDN libs runtime-cached.
+
+### Keyboard shortcuts
+| Key | Action | Key | Action |
+|----|--------|----|--------|
+| `N` | New task (focus quick-add) | `Ctrl/⌘K` | Command palette |
+| `/` | Search | `Ctrl/⌘Z` | Undo delete |
+| `g` then `t/u/i/a` | Go to Today/Upcoming/Inbox/All | `1`–`5` | Switch layout |
+| In a task row: `Space` complete · `Enter` open · `Del` delete · `f` flag · `p` pin | | | |
+
+---
+
+## CDN libraries (with local-fallback note)
+
+Loaded from jsDelivr and runtime-cached by the service worker so they keep
+working offline after the first online load:
+
+- **chrono-node** — natural-language date parsing (loaded as an ES module via
+  jsDelivr's `+esm` bundle, since chrono v2 ships ESM only; `app.js` reads it
+  from `window.chrono`)
+- **rrule.js** — recurrence rules (classic `<script>`)
+- **SortableJS** — drag-and-drop (classic `<script>`)
+
+`app.js` degrades gracefully if a CDN is blocked (the core app still runs; only
+NL-date/recurrence/drag conveniences are affected on a first offline load).
+
+**To self-host** (e.g. corporate networks that block CDNs): download each library
+into a `./vendor/` folder and update the library tags in `index.html` to point
+there (for chrono, change the `import` URL in the `<script type="module">`).
+Then they're precached like the rest of the shell.
+
+---
+
+## Privacy
+
+No accounts, no servers, no analytics, no network calls except the three CDN
+script loads (which you can self-host). Your tasks never leave your device.
