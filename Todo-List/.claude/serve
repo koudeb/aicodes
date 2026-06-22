@@ -1,0 +1,25 @@
+param([int]$Port = 8080)
+# Minimal static file server for local preview (dev only).
+$root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add("http://localhost:$Port/")
+$listener.Start()
+Write-Host "Serving $root at http://localhost:$Port/"
+$mime = @{ ".html"="text/html"; ".css"="text/css"; ".js"="text/javascript"; ".json"="application/json"; ".png"="image/png"; ".ics"="text/calendar"; ".csv"="text/csv"; ".svg"="image/svg+xml" }
+while ($listener.IsListening) {
+  try {
+    $ctx = $listener.GetContext()
+    $path = [Uri]::UnescapeDataString($ctx.Request.Url.AbsolutePath.TrimStart('/'))
+    if ([string]::IsNullOrEmpty($path)) { $path = "index.html" }
+    $full = Join-Path $root $path
+    if (Test-Path $full -PathType Leaf) {
+      $bytes = [System.IO.File]::ReadAllBytes($full)
+      $ext = [System.IO.Path]::GetExtension($full).ToLower()
+      $ctx.Response.ContentType = if ($mime.ContainsKey($ext)) { $mime[$ext] } else { "application/octet-stream" }
+      $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+    } else {
+      $ctx.Response.StatusCode = 404
+    }
+    $ctx.Response.Close()
+  } catch { }
+}
