@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($node = \\(Get-Command node -ErrorAction SilentlyContinue\\); $npx = \\(Get-Command npx -ErrorAction SilentlyContinue\\); $py = \\(Get-Command py -ErrorAction SilentlyContinue\\); \"node: $\\($node.Source\\)\"; \"npx: $\\($npx.Source\\)\"; \"py: $\\($py.Source\\)\")",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}
