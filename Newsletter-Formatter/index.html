@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Newsletter Formatter</title>
+
+  <!-- ===== External stylesheet (all styling lives in style.css) ===== -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- ============================================================
+       TOP MENU BAR
+       Fixed bar with app title and an AI environment-status pill
+       that reflects whether the keyless call is ready or a key is
+       needed. Updated by script.js.
+       ============================================================ -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark">✦</span>
+        <span class="brand-name">AI Newsletter Formatter</span>
+      </div>
+      <!-- Status pill: text + dot color set dynamically in script.js -->
+      <div id="statusPill" class="pill pill-neutral">
+        <span class="pill-dot"></span>
+        <span id="statusText">AI: checking…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN LAYOUT
+       Two-column grid on desktop: input/controls on the left,
+       live newsletter preview on the right. Stacks on mobile.
+       ============================================================ -->
+  <main class="layout">
+
+    <!-- ---------- LEFT COLUMN: INPUT + CONTROLS ---------- -->
+    <section class="col col-input">
+
+      <!-- ===== Input card: raw notes textarea + char counter ===== -->
+      <div class="card">
+        <div class="card-head">
+          <label for="rawNotes" class="card-title">Paste your raw news notes here</label>
+          <span id="charCount" class="counter">0 characters</span>
+        </div>
+        <textarea
+          id="rawNotes"
+          class="textarea"
+          rows="12"
+          placeholder="Drop in bullet points, links, half-formed thoughts… anything. Claude turns it into a polished newsletter."
+        ></textarea>
+      </div>
+
+      <!-- ===== Configuration card: niche, tone, name, date ===== -->
+      <div class="card">
+        <div class="grid-2">
+
+          <!-- Niche selector with a "Custom…" escape hatch -->
+          <div class="field">
+            <label for="niche" class="label">Niche</label>
+            <select id="niche" class="input">
+              <option value="Technology">Technology</option>
+              <option value="Sports">Sports</option>
+              <option value="Gaming">Gaming</option>
+              <option value="B2B SaaS">B2B SaaS</option>
+              <option value="Editorial Digest">Editorial Digest</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Finance">Finance</option>
+              <option value="Lifestyle">Lifestyle</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Crypto/Web3">Crypto/Web3</option>
+              <option value="__custom">Custom…</option>
+            </select>
+          </div>
+
+          <!-- Hidden until "Custom…" is chosen -->
+          <div class="field hidden" id="customNicheWrap">
+            <label for="customNiche" class="label">Custom niche</label>
+            <input id="customNiche" class="input" type="text" placeholder="e.g. Indie Coffee Roasters" />
+          </div>
+
+          <!-- Tone of voice -->
+          <div class="field">
+            <label for="tone" class="label">Tone</label>
+            <select id="tone" class="input">
+              <option value="Punchy/Smart-Brevity">Punchy / Smart-Brevity</option>
+              <option value="Conversational">Conversational</option>
+              <option value="Formal">Formal</option>
+              <option value="Witty">Witty</option>
+            </select>
+          </div>
+
+          <!-- Newsletter name -->
+          <div class="field">
+            <label for="nlName" class="label">Newsletter name</label>
+            <input id="nlName" class="input" type="text" placeholder="The Daily Byte" />
+          </div>
+
+          <!-- Issue date (auto-filled by script.js to today) -->
+          <div class="field">
+            <label for="issueDate" class="label">Issue date</label>
+            <input id="issueDate" class="input" type="date" />
+          </div>
+        </div>
+
+        <!-- ===== Collapsible settings: optional API keys ===== -->
+        <details class="settings">
+          <summary>Settings — optional API keys</summary>
+          <div class="settings-body">
+            <div class="field">
+              <label for="apiKey" class="label">Anthropic API key (only needed if the keyless call fails)</label>
+              <input id="apiKey" class="input" type="password" placeholder="sk-ant-…" autocomplete="off" />
+            </div>
+            <div class="field">
+              <label for="imgApiKey" class="label">Image API key (Pexels recommended — optional)</label>
+              <input id="imgApiKey" class="input" type="password" placeholder="Pexels / Unsplash / Pixabay key" autocomplete="off" />
+            </div>
+            <p class="hint">Keys stay in your browser and are only sent to their own API. Without an image key the app uses keyless fallbacks.</p>
+          </div>
+        </details>
+
+        <!-- ===== Primary action button with loading state ===== -->
+        <button id="formatBtn" class="btn btn-primary btn-block">
+          <span class="btn-label">Format Newsletter</span>
+          <span class="spinner hidden" aria-hidden="true"></span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ---------- RIGHT COLUMN: PREVIEW + EXPORTS ---------- -->
+    <section class="col col-output">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Live preview</span>
+          <!-- Export controls (disabled until a newsletter exists) -->
+          <div class="export-row">
+            <button class="btn btn-ghost" id="pdfBtn" disabled>PDF</button>
+            <button class="btn btn-ghost" id="docBtn" disabled>Word</button>
+            <button class="btn btn-ghost" id="htmlBtn" disabled>Copy HTML</button>
+            <button class="btn btn-ghost" id="txtBtn" disabled>Copy Text</button>
+          </div>
+        </div>
+
+        <!-- The 600px-wide preview column. script.js renders into #preview. -->
+        <div class="preview-stage">
+          <div id="preview" class="preview">
+            <div class="preview-empty">
+              <div class="preview-empty-icon">📰</div>
+              <p>Your formatted newsletter will appear here.</p>
+              <p class="muted">Paste some notes and hit <strong>Format Newsletter</strong>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== Toast container: transient messages injected by script.js ===== -->
+  <div id="toastWrap" class="toast-wrap" aria-live="polite"></div>
+
+  <!-- ===== App logic (all behavior lives in script.js) ===== -->
+  <script src="script.js"></script>
+</body>
+</html>
