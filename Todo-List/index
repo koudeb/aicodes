@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="Tasked — a fast, private, fully client-side task manager. All data stays on your device." />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#0f1115" />
+
+  <title>Tasked — Local-First To-Do</title>
+
+  <!-- Relative paths so the app works at the site root OR in a subfolder -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- =========================================================
+       CDN libraries (with local-fallback notes in README):
+         - chrono-node : natural-language date parsing
+         - rrule       : iCalendar recurrence rules
+         - Sortable    : drag-and-drop reordering (touch + mouse)
+       These are loaded defer; app.js guards for their absence so the
+       core app still runs if a CDN is blocked/offline (first load only).
+       To self-host: download each file into ./vendor/ and point these
+       src= attributes there instead.
+       ========================================================= -->
+  <!-- chrono-node v2 ships ES modules only, so we import it and expose a
+       global (window.chrono) that app.js looks for. app.js checks for chrono
+       lazily (at parse time), so a slightly-late async load is harmless. -->
+  <script type="module">
+    import * as chrono from 'https://cdn.jsdelivr.net/npm/chrono-node@2.7.7/+esm';
+    window.chrono = chrono;
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+  <!-- Main application logic -->
+  <script defer src="app.js"></script>
+</head>
+
+<body data-theme="system" data-density="comfortable">
+
+  <!-- Screen-reader live region for add/complete/announcements -->
+  <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Skip link for keyboard users -->
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <div id="app" class="app">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside id="sidebar" class="sidebar" aria-label="Navigation">
+      <div class="sidebar-head">
+        <button id="sidebar-close" class="icon-btn only-mobile" aria-label="Close menu">✕</button>
+        <span class="brand">✓ Tasked</span>
+      </div>
+
+      <nav class="nav" aria-label="Smart views">
+        <ul class="nav-list" id="smart-views">
+          <li><button class="nav-item" data-view="today"><span class="ico">★</span> Today <span class="badge" data-count="today"></span></button></li>
+          <li><button class="nav-item" data-view="upcoming"><span class="ico">»</span> Upcoming <span class="badge" data-count="upcoming"></span></button></li>
+          <li><button class="nav-item" data-view="inbox"><span class="ico">⌂</span> Inbox <span class="badge" data-count="inbox"></span></button></li>
+          <li><button class="nav-item" data-view="all"><span class="ico">≡</span> All Tasks <span class="badge" data-count="all"></span></button></li>
+          <li><button class="nav-item" data-view="flagged"><span class="ico">⚑</span> Flagged <span class="badge" data-count="flagged"></span></button></li>
+          <li><button class="nav-item" data-view="someday"><span class="ico">☾</span> Someday</button></li>
+        </ul>
+      </nav>
+
+      <div class="nav-section">
+        <div class="nav-section-head">
+          <span>Areas &amp; Projects</span>
+          <button id="add-project" class="icon-btn" aria-label="Add project" title="Add project">＋</button>
+        </div>
+        <ul class="nav-list" id="projects-list"><!-- rendered by app.js --></ul>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-head"><span>Saved searches</span></div>
+        <ul class="nav-list" id="saved-searches"><!-- rendered by app.js --></ul>
+      </div>
+
+      <nav class="nav" aria-label="Other views">
+        <ul class="nav-list">
+          <li><button class="nav-item" data-view="habits"><span class="ico">♻</span> Habits</button></li>
+          <li><button class="nav-item" data-view="stats"><span class="ico">▦</span> Stats</button></li>
+          <li><button class="nav-item" data-view="archive"><span class="ico">▣</span> Archive</button></li>
+          <li><button class="nav-item" data-view="trash"><span class="ico">🗑</span> Trash <span class="badge" data-count="trash"></span></button></li>
+        </ul>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="gamify" id="gamify-mini" title="Your progress">
+          <span class="level" id="level-badge">Lv 1</span>
+          <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+          <span class="streak" id="streak-badge">🔥 0</span>
+        </div>
+        <div class="foot-btns">
+          <button class="icon-btn" id="open-settings" aria-label="Settings" title="Settings">⚙</button>
+          <button class="icon-btn" id="toggle-theme" aria-label="Toggle theme" title="Toggle theme">◐</button>
+          <button class="icon-btn" id="open-pomodoro" aria-label="Pomodoro timer" title="Pomodoro">⏱</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main id="main" class="main">
+      <header class="topbar">
+        <button id="sidebar-open" class="icon-btn only-mobile" aria-label="Open menu">☰</button>
+        <div class="view-title">
+          <h1 id="view-title">Today</h1>
+          <span id="view-subtitle" class="view-subtitle"></span>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="btn ghost" id="open-search" title="Search (/)">🔍 <span class="only-desktop">Search</span></button>
+          <button class="btn ghost" id="open-palette" title="Command palette (Ctrl/⌘K)">⌘K</button>
+          <div class="view-switch" id="view-switch" role="tablist" aria-label="View layout">
+            <button class="vs-btn" data-layout="list" role="tab" title="List">≣</button>
+            <button class="vs-btn" data-layout="board" role="tab" title="Kanban board">▤</button>
+            <button class="vs-btn" data-layout="calendar" role="tab" title="Calendar">▦</button>
+            <button class="vs-btn" data-layout="matrix" role="tab" title="Eisenhower matrix">⊞</button>
+            <button class="vs-btn" data-layout="planner" role="tab" title="Time-block planner">⌗</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Quick-add with natural language parsing -->
+      <form id="quick-add-form" class="quick-add" autocomplete="off">
+        <input
+          id="quick-add"
+          class="quick-add-input"
+          type="text"
+          placeholder="Add task — e.g. Submit report next Friday at 3pm every 2 weeks #work !p1"
+          aria-label="Quick add task with natural language"
+        />
+        <button class="btn primary" type="submit">Add</button>
+        <div id="quick-add-preview" class="quick-add-preview" aria-live="polite"></div>
+      </form>
+
+      <!-- Filter / sort toolbar -->
+      <div class="toolbar" id="toolbar">
+        <div class="filters" id="filter-chips"><!-- rendered by app.js --></div>
+        <div class="toolbar-right">
+          <label class="inline">Sort
+            <select id="sort-select" class="select">
+              <option value="manual">Manual</option>
+              <option value="due">Due date</option>
+              <option value="priority">Priority</option>
+              <option value="created">Created</option>
+              <option value="alpha">A–Z</option>
+            </select>
+          </label>
+          <button class="btn ghost small" id="focus-mode-btn" title="Focus mode">◎ Focus</button>
+          <button class="btn ghost small" id="save-search-btn" title="Save current filters">＋ Save search</button>
+        </div>
+      </div>
+
+      <!-- The view renders here -->
+      <section id="view-root" class="view-root" tabindex="-1"></section>
+    </main>
+  </div>
+
+  <!-- ============ TASK DETAIL DIALOG ============ -->
+  <dialog id="task-dialog" class="dialog task-dialog">
+    <form method="dialog" id="task-form" class="task-form"><!-- rendered by app.js --></form>
+  </dialog>
+
+  <!-- ============ COMMAND PALETTE ============ -->
+  <dialog id="palette" class="dialog palette">
+    <input id="palette-input" class="palette-input" type="text" placeholder="Type a command…" aria-label="Command palette" />
+    <ul id="palette-list" class="palette-list" role="listbox" aria-label="Commands"></ul>
+  </dialog>
+
+  <!-- ============ SEARCH DIALOG ============ -->
+  <dialog id="search-dialog" class="dialog palette">
+    <input id="search-input" class="palette-input" type="text" placeholder="Search tasks…" aria-label="Search tasks" />
+    <ul id="search-results" class="palette-list" role="listbox" aria-label="Search results"></ul>
+  </dialog>
+
+  <!-- ============ SETTINGS DIALOG ============ -->
+  <dialog id="settings-dialog" class="dialog settings-dialog">
+    <div class="dialog-head">
+      <h2>Settings</h2>
+      <button class="icon-btn" data-close-dialog aria-label="Close">✕</button>
+    </div>
+    <div class="dialog-body" id="settings-body"><!-- rendered by app.js --></div>
+  </dialog>
+
+  <!-- ============ POMODORO DIALOG ============ -->
+  <dialog id="pomodoro-dialog" class="dialog pomodoro-dialog">
+    <div class="dialog-head">
+      <h2>Pomodoro</h2>
+      <button class="icon-btn" data-close-dialog aria-label="Close">✕</button>
+    </div>
+    <div class="dialog-body" id="pomodoro-body"><!-- rendered by app.js --></div>
+  </dialog>
+
+  <!-- ============ PROJECT DIALOG ============ -->
+  <dialog id="project-dialog" class="dialog project-dialog">
+    <form method="dialog" id="project-form" class="task-form"><!-- rendered by app.js --></form>
+  </dialog>
+
+  <!-- ============ TOASTS / UNDO ============ -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <!-- ============ CONFETTI CANVAS ============ -->
+  <canvas id="confetti" class="confetti-canvas" aria-hidden="true"></canvas>
+
+  <!-- Mobile sidebar scrim -->
+  <div id="scrim" class="scrim" hidden></div>
+</body>
+</html>
